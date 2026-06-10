@@ -9,7 +9,31 @@ import { createServer as createViteServer } from 'vite';
 import { Card, Player, RoomPublicState, RoomStatus, PlayerActionType, AuthUser, UserRole } from './src/types';
 import { createDeck, secureShuffle, evaluate7CardHand, compareHandEvaluations } from './src/poker';
 import crypto from 'crypto';
+import admin from 'firebase-admin';
+import fs from 'fs';
 
+// --- FIREBASE INITIALIZATION ---
+let db: admin.firestore.Firestore | null = null;
+try {
+  let serviceAccount;
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } else if (fs.existsSync('./firebase-service-account.json')) {
+    serviceAccount = JSON.parse(fs.readFileSync('./firebase-service-account.json', 'utf8'));
+  }
+
+  if (serviceAccount) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+    db = admin.firestore();
+    console.log('[Poker Server] Firebase Firestore initialized successfully.');
+  } else {
+    console.warn('[Poker Server] No Firebase credentials found. Running in ephemeral memory mode.');
+  }
+} catch (e) {
+  console.error('[Poker Server] Failed to initialize Firebase:', e);
+}
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
@@ -117,14 +141,28 @@ function seedRooms() {
 
 seedRooms();
 
-  // --- AUTH API ENDPOINTS ---
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'ระบุชื่อผู้ใช้และรหัสผ่าน' });
   }
 
-  const user = Object.values(users).find(u => u.username === username);
+  let user = Object.values(users).find(u => u.username === username);
+
+  if (db) {
+    try {
+      const snap = await db.collection('users').where('username', '==', username).limit(1).get();
+      if (!snap.empty) {
+        const doc = snap.docs[0];
+        const data = doc.data();
+        user = { id: doc.id, ...data } as any;
+        users[user!.id] = user as any; // update cache
+      }
+    } catch (e) {
+      console.error('[Poker Server] Firestore error during login', e);
+    }
+  }
+
   if (!user || user.passwordHash !== password) {
     return res.status(401).json({ error: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
   }
@@ -138,29 +176,50 @@ app.post('/api/login', (req, res) => {
       username: user.username,
       role: user.role,
       displayName: user.displayName,
-      token
+      token,
+      chips: user.chips || 10000
     }
   });
 });
 
-app.post('/api/register', (req, res) => {
+app.post('/api/register', async (req, res) => {
   const { username, password, displayName } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'ระบุชื่อผู้ใช้และรหัสผ่าน' });
   }
 
-  if (Object.values(users).some(u => u.username === username)) {
+  let exists = Object.values(users).some(u => u.username === username);
+  if (db && !exists) {
+    try {
+      const snap = await db.collection('users').where('username', '==', username).limit(1).get();
+      if (!snap.empty) exists = true;
+    } catch (e) {
+      console.error('[Poker Server] Firestore error checking user exists', e);
+    }
+  }
+
+  if (exists) {
     return res.status(400).json({ error: 'ชื่อผู้ใช้นี้มีผู้ใช้งานแล้ว' });
   }
 
   const id = `user-${crypto.randomUUID()}`;
-  users[id] = {
+  const newUser = {
     id,
     username,
-    role: 'player',
+    role: 'player' as UserRole,
     displayName: displayName || username,
-    passwordHash: password
+    passwordHash: password,
+    chips: 10000
   };
+  users[id] = newUser;
+
+  if (db) {
+    try {
+      await db.collection('users').doc(id).set(newUser);
+    } catch (e) {
+      console.error('[Poker Server] Firestore error during register', e);
+    }
+  }
 
   const token = crypto.randomBytes(16).toString('hex');
   activeTokens[token] = id;
@@ -170,8 +229,9 @@ app.post('/api/register', (req, res) => {
       id,
       username,
       role: 'player',
-      displayName: displayName || username,
-      token
+      displayName: newUser.displayName,
+      token,
+      chips: 10000
     }
   });
 });
@@ -190,6 +250,21 @@ const authenticate = (req: express.Request, res: express.Response, next: express
 };
 
 app.use(authenticate);
+
+// Helper to sync chips to Firebase
+async function syncRoomChips(room: RoomInternal) {
+  if (!db) return;
+  for (const p of Object.values(room.players)) {
+    if (!p.isBot && users[p.id]) {
+      users[p.id].chips = p.chips;
+      try {
+        await db.collection('users').doc(p.id).update({ chips: p.chips });
+      } catch (e) {
+        console.error(`[Poker Server] Failed to sync chips for ${p.id}`, e);
+      }
+    }
+  }
+}
 
 // --- POKER ROOM API ---
 
@@ -329,7 +404,7 @@ app.post('/api/rooms/join', (req, res) => {
   room.players[id] = {
     id,
     name: user.displayName,
-    chips: 1000,
+    chips: users[id]?.chips || 10000,
     currentBet: 0,
     isFolded: false,
     isAllIn: false,
@@ -744,6 +819,9 @@ function checkBustedPlayers(room: RoomInternal) {
       }
     }
   });
+  
+  // Sync chips back to Firebase after hand
+  syncRoomChips(room);
 }
 
 // Check if current round of betting is concluded
@@ -1030,8 +1108,18 @@ app.post('/api/rooms/:roomId/bot-action', (req, res) => {
 
   if (toCall <= 0) {
     // Free check or opportunity to bet
-    if (winProbability >= 0.70) {
-      // Very strong, make a value bet!
+    if (winProbability >= 0.90) {
+      // Very strong, make a value bet or ALL IN!
+      if (Math.random() < 0.3) {
+        chosenAction = 'RAISE'; // We use RAISE to cover All-in amount natively
+        chosenAmount = bot.chips + bot.currentBet;
+        bot.isAllIn = true;
+      } else {
+        const betAmount = Math.max(room.bigBlind, Math.floor(bot.chips * 0.4));
+        chosenAction = 'BET';
+        chosenAmount = betAmount;
+      }
+    } else if (winProbability >= 0.70) {
       const betAmount = Math.max(room.bigBlind, 40);
       if (bot.chips >= betAmount) {
         chosenAction = 'BET';
@@ -1040,7 +1128,6 @@ app.post('/api/rooms/:roomId/bot-action', (req, res) => {
         chosenAction = 'CHECK';
       }
     } else if (winProbability >= 0.40 && Math.random() < 0.25) {
-      // Semi-bluff bet occasionally
       const betAmount = room.bigBlind;
       if (bot.chips >= betAmount) {
         chosenAction = 'BET';
@@ -1053,7 +1140,19 @@ app.post('/api/rooms/:roomId/bot-action', (req, res) => {
     }
   } else {
     // Active bet exists, must Call, Raise or Fold
-    if (winProbability >= potOdds + 0.18 && bot.chips >= (room.currentBet + room.minRaise - bot.currentBet)) {
+    if (winProbability >= 0.90) {
+      // Extremely strong, All-In or massive raise
+      if (Math.random() < 0.5) {
+        chosenAction = 'RAISE';
+        chosenAmount = bot.chips + bot.currentBet;
+        bot.isAllIn = true;
+      } else {
+        const raiseTo = room.currentBet + Math.max(room.minRaise, Math.floor(bot.chips * 0.3));
+        chosenAction = 'RAISE';
+        chosenAmount = Math.min(raiseTo, bot.chips + bot.currentBet);
+        if (chosenAmount >= bot.chips + bot.currentBet) bot.isAllIn = true;
+      }
+    } else if (winProbability >= potOdds + 0.18 && bot.chips >= (room.currentBet + room.minRaise - bot.currentBet)) {
       // Expectation is extremely high, raise!
       const raiseTo = room.currentBet + Math.max(room.minRaise, 40);
       if (bot.chips >= (raiseTo - bot.currentBet)) {

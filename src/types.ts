@@ -65,6 +65,7 @@ export interface AuthUser {
   role: UserRole;
   displayName: string;
   token?: string;
+  chips?: number;
 }
 
 // Complete layout reflecting the Firebase Realtime DB schema representation

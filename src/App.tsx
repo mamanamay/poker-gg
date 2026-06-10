@@ -199,11 +199,15 @@ function GameApp() {
     if (!card || !card.suit || !card.rank) return null;
     const det = SUIT_SYMBOLS[card.suit];
     if (!det) return null;
+    
+    // เปลี่ยน T เป็น 10
+    const displayRank = card.rank === 'T' ? '10' : card.rank;
+    
     return (
       <div key={key} className={`w-10 h-14 bg-white rounded-lg border border-slate-200 font-extrabold flex flex-col justify-between p-1 text-xs shadow ${det.color}`}>
-        <div className="leading-none">{card.rank}</div>
+        <div className="leading-none">{displayRank}</div>
         <div className="text-center text-lg leading-none">{det.symbol}</div>
-        <div className="leading-none text-right flex justify-end">{card.rank}</div>
+        <div className="leading-none text-right flex justify-end">{displayRank}</div>
       </div>
     );
   };
@@ -240,12 +244,12 @@ function GameApp() {
       <main className="flex-1 flex flex-col lg:flex-row relative overflow-hidden bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black">
         
         {/* Left/Top: Poker Table */}
-        <div className="flex-1 flex flex-col items-center justify-center p-4 relative min-h-[60vh]">
+        <div className="flex-1 flex flex-col items-center justify-center p-4 relative min-h-[70vh]">
           {/* Table Surface */}
-          <div className="absolute inset-4 sm:inset-12 bg-gradient-to-b from-emerald-900 to-emerald-950 rounded-full border-8 border-slate-800 shadow-[inset_0_0_50px_rgba(0,0,0,0.8)] opacity-90"></div>
+          <div className="absolute inset-4 sm:inset-12 bg-gradient-to-b from-emerald-900 to-emerald-950 rounded-[100px] border-[12px] border-slate-800 shadow-[inset_0_0_50px_rgba(0,0,0,0.8)] opacity-90"></div>
 
           {/* Top/Side Players (Opponents) */}
-          <div className="w-full max-w-4xl flex flex-wrap justify-center gap-8 z-10 mb-8 sm:mb-16">
+          <div className="w-full max-w-4xl flex flex-wrap justify-center gap-6 sm:gap-16 z-10 absolute top-8 sm:top-16">
             {playerList.map((p) => {
               if (p.id === authUser.id) return null; // Don't render hero here
               const isActive = roomPublic?.activePlayerId === p.id;
@@ -298,7 +302,7 @@ function GameApp() {
           </div>
 
           {/* Center Community Board */}
-          <div className="z-10 bg-slate-900/60 backdrop-blur-sm border border-emerald-500/20 rounded-3xl p-4 sm:p-6 shadow-2xl min-w-[280px] sm:min-w-[400px] flex flex-col items-center mt-[-20px] sm:mt-0">
+          <div className="z-10 bg-slate-900/60 backdrop-blur-sm border border-emerald-500/20 rounded-3xl p-4 sm:p-6 shadow-2xl min-w-[280px] sm:min-w-[400px] flex flex-col items-center absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
             <div className="text-center mb-3">
               <div className="text-[10px] text-emerald-400/80 font-mono uppercase tracking-widest mb-1">เงินกองกลาง (Pot)</div>
               <div className="text-3xl font-black text-amber-400 drop-shadow-md font-mono">${roomPublic?.pot || 0}</div>
@@ -451,6 +455,13 @@ function GameApp() {
                     className="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 rounded-lg text-sm transition-all shadow-lg border border-amber-400/30"
                   >
                     เกทับ
+                  </button>
+                  <button 
+                    onClick={() => submitAction('RAISE', (heroPlayer?.chips || 0) + (heroPlayer?.currentBet || 0))} 
+                    disabled={isLoading}
+                    className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-black tracking-widest py-2 rounded-lg text-sm transition-all shadow-[0_0_15px_rgba(225,29,72,0.5)] border border-rose-400/50"
+                  >
+                    ALL IN
                   </button>
                 </div>
               </div>
