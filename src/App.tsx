@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShieldCheck, LogOut, Loader2, User, Bot, CircleCheck, Info, Plus, Minus } from 'lucide-react';
+import { ShieldCheck, LogOut, Loader2, User, Bot, CircleCheck, Info, Plus, Minus, Play } from 'lucide-react';
 import { Card, Player, RoomPublicState, PlayerActionType, AuthUser } from './types';
 import Login from './components/Login';
 import Admin from './components/Admin';
