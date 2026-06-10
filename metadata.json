@@ -1,0 +1,6 @@
+{
+  "name": "Texas Hold'em Poker Engine",
+  "description": "Secure multiplayer and bot Texas Hold'em poker engine featuring dynamic room management, secure state handling, cryptographic card dealing, hand evaluation, and interactive simulation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
