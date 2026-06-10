@@ -249,6 +249,24 @@ const authenticate = (req: express.Request, res: express.Response, next: express
   next();
 };
 
+app.get('/api/me', async (req, res) => {
+  const user = (req as any).user;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+  // Sync with Firestore if available to get fresh chips
+  if (db && !user.id.startsWith('bot-')) {
+    try {
+      const snap = await db.collection('users').doc(user.id).get();
+      if (snap.exists) {
+        const data = snap.data();
+        users[user.id].chips = data?.chips || users[user.id].chips;
+      }
+    } catch(e) {}
+  }
+
+  res.json({ user: users[user.id] });
+});
+
 app.use(authenticate);
 
 // Helper to sync chips to Firebase
@@ -277,7 +295,13 @@ app.get('/api/rooms', (req, res) => {
     playerCount: Object.keys(room.players).length,
     activePlayerId: room.activePlayerId,
     communityCardCount: room.communityCards.length,
-    inviteCode: room.inviteCode
+    inviteCode: room.inviteCode,
+    players: Object.values(room.players).map(p => ({
+      id: p.id,
+      name: p.name,
+      chips: p.chips,
+      isBot: p.isBot
+    }))
   }));
   res.json(roomList);
 });
@@ -417,17 +441,86 @@ app.post('/api/rooms/join', (req, res) => {
   res.json({ success: true, roomId: room.roomId, message: `Joined ${room.roomId}` });
 });
 
+// Helper to add bot
+app.post('/api/rooms/:roomId/add-bot', (req, res) => {
+  const user = (req as any).user as AuthUser;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  const { roomId } = req.params;
+  const room = rooms[roomId];
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  if (room.status !== 'LOBBY') return res.status(400).json({ error: 'Game already started' });
+
+  const playerCount = Object.keys(room.players).length;
+  if (playerCount >= 5) return res.status(400).json({ error: 'Room is full' });
+
+  const seatIndexes = Object.values(room.players).map(p => p.seatIndex);
+  let seat = 0;
+  while (seatIndexes.includes(seat)) seat++;
+
+  const botNames = ['Alpha', 'Omega', 'Gamma', 'Delta', 'Sigma'];
+  const botId = `bot-${crypto.randomBytes(4).toString('hex')}`;
+  
+  room.players[botId] = {
+    id: botId,
+    name: `Bot ${botNames[playerCount % botNames.length]}`,
+    chips: 10000,
+    currentBet: 0,
+    isFolded: false,
+    isAllIn: false,
+    isActive: false,
+    isBot: true,
+    seatIndex: seat,
+    lastAction: 'WAITING',
+  };
+
+  res.json({ success: true, message: 'Bot added' });
+});
+
 // Handle player leaves/disconnects gracefully during hands and lobbies
 app.post('/api/rooms/:roomId/leave', (req, res) => {
   const { roomId } = req.params;
-  const { playerId } = req.body;
+  const user = (req as any).user;
+  const room = rooms[roomId];
 
+  if (room && room.players[user.id]) {
+    removePlayerFromRoom(room, user.id);
+  }
+
+  res.json({ success: true });
+});
+
+// Admin API: Kick player
+app.delete('/api/rooms/:roomId/admin/kick/:playerId', (req, res) => {
+  const user = (req as any).user as AuthUser;
+  if (!user || user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  const { roomId, playerId } = req.params;
   const room = rooms[roomId];
   if (!room) return res.status(404).json({ error: 'Room not found' });
 
+  if (room.players[playerId]) {
+    removePlayerFromRoom(room, playerId);
+  }
+  res.json({ success: true });
+});
+
+// Admin API: Rig deck (Force Winner)
+app.post('/api/rooms/:roomId/admin/rig', (req, res) => {
+  const user = (req as any).user as AuthUser;
+  if (!user || user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+  const { roomId } = req.params;
+  const { winnerId } = req.body;
+  const room = rooms[roomId];
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  if (!room.players[winnerId]) return res.status(400).json({ error: 'Player not in room' });
+
+  (room as any).riggedWinnerId = winnerId;
+  res.json({ success: true, message: `Next hand rigged for ${room.players[winnerId].name}` });
+});
+
+function removePlayerFromRoom(room: RoomInternal, playerId: string) {
   const player = room.players[playerId];
   if (!player) {
-    return res.status(404).json({ error: 'Player does not exist in this secure room.' });
+    return;
   }
 
   const wasActiveTurn = room.activePlayerId === playerId;
@@ -774,6 +867,21 @@ function evaluateShowdown(room: RoomInternal) {
 
   // Sort evaluations descending
   evaluations.sort((a, b) => compareHandEvaluations(b.evaluation, a.evaluation));
+
+  // --- GOD MODE OVERRIDE ---
+  if ((room as any).riggedWinnerId) {
+    const riggedId = (room as any).riggedWinnerId;
+    const riggedIndex = evaluations.findIndex(e => e.playerId === riggedId);
+    if (riggedIndex > -1) {
+      const riggedEval = evaluations.splice(riggedIndex, 1)[0];
+      // Give them a fake Royal Flush score to guarantee they beat everything
+      riggedEval.evaluation.rankValue = 999;
+      riggedEval.evaluation.handName = 'Royal Flush (Admin God Mode)';
+      evaluations.unshift(riggedEval);
+    }
+    // Clear rig flag after use
+    delete (room as any).riggedWinnerId;
+  }
 
   // Determine top score (could be multiple winners in case of ties!)
   const bestEval = evaluations[0].evaluation;

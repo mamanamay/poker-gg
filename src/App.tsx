@@ -4,6 +4,8 @@ import { Card, Player, RoomPublicState, PlayerActionType, AuthUser } from './typ
 import Login from './components/Login';
 import Admin from './components/Admin';
 import Lobby from './components/Lobby';
+import ErrorBoundary from './components/ErrorBoundary';
+import { evaluate7CardHand } from './poker';
 
 const SUIT_SYMBOLS: Record<string, { symbol: string, color: string }> = {
   H: { symbol: '♥', color: 'text-rose-600' },
@@ -54,9 +56,54 @@ function GameApp() {
   const [showdownHoleCards, setShowdownHoleCards] = useState<Record<string, Card[]>>({});
   const [actionAmount, setActionAmount] = useState<number>(40);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isAppLoading, setIsAppLoading] = useState(true);
   const [actionLogs, setActionLogs] = useState<string[]>(['ระบบ: ห้องพร้อมแล้ว รอผู้เล่นหรือเริ่มเกมได้เลย']);
   
   const pollIntervalRef = useRef<any>(null);
+
+  // Check localStorage for token on load
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
+    
+    if (token && userStr) {
+      try {
+        const parsedUser = JSON.parse(userStr);
+        setAuthUser({ ...parsedUser, token });
+        
+        fetch('/api/me', { headers: { 'Authorization': `Bearer ${token}` } })
+          .then(res => res.ok ? res.json() : Promise.reject())
+          .then(data => {
+            const updatedUser = { ...data.user, token };
+            setAuthUser(updatedUser);
+            localStorage.setItem('user', JSON.stringify(data.user));
+          })
+          .catch(() => {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            setAuthUser(null);
+          })
+          .finally(() => setIsAppLoading(false));
+      } catch(e) {
+        setIsAppLoading(false);
+      }
+    } else {
+      setIsAppLoading(false);
+    }
+  }, []);
+
+  const handleLoginSuccess = (user: AuthUser) => {
+    localStorage.setItem('token', user.token!);
+    localStorage.setItem('user', JSON.stringify(user));
+    setAuthUser(user);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setAuthUser(null);
+    setCurrentRoomId(null);
+  };
 
   const fetchRoomState = async (roomId: string, silent = false) => {
     if (!silent) setIsLoading(true);
@@ -97,7 +144,7 @@ function GameApp() {
     if (activePlayer && activePlayer.isBot && roomPublic.status !== 'SHOWDOWN' && roomPublic.status !== 'LOBBY') {
       const timer = setTimeout(() => {
         triggerBotAction();
-      }, 1500);
+      }, 500);
       return () => clearTimeout(timer);
     }
   }, [roomPublic?.activePlayerId, roomPublic?.status]);
@@ -177,22 +224,58 @@ function GameApp() {
     }
   };
 
+  if (isAppLoading) {
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><Loader2 className="animate-spin text-amber-500" size={48} /></div>;
+  }
+
   if (!authUser) {
-    return <Login onLoginSuccess={setAuthUser} />;
+    return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
   if (authUser.role === 'admin') {
-    return <Admin user={authUser} onLogout={() => setAuthUser(null)} />;
+    return <Admin user={authUser} onLogout={handleLogout} />;
   }
 
   if (!currentRoomId) {
-    return <Lobby user={authUser} onJoinRoom={(roomId) => setCurrentRoomId(roomId)} onLogout={() => setAuthUser(null)} />;
+    return <Lobby user={authUser} onJoinRoom={(roomId) => setCurrentRoomId(roomId)} onLogout={handleLogout} />;
   }
 
   // --- GAME RENDERING LOGIC ---
   const playerList = Object.values(players).sort((a, b) => a.seatIndex - b.seatIndex);
   const heroIndex = playerList.findIndex(p => p.id === authUser.id);
   const heroPlayer = players[authUser.id];
+
+  const getHandOdds = () => {
+    if (myHoleCards.length === 0) return null;
+    if (roomPublic?.status === 'LOBBY' || roomPublic?.status === 'SHOWDOWN') return null;
+    
+    const evaluation = evaluate7CardHand(myHoleCards, roomPublic?.communityCards || []);
+    
+    // Simplistic win probability heuristic
+    const cardsMerged = [...myHoleCards, ...(roomPublic?.communityCards || [])];
+    const suitCounts: Record<string, number> = {};
+    cardsMerged.forEach(c => suitCounts[c.suit] = (suitCounts[c.suit] || 0) + 1);
+    const maxSuitCount = Math.max(...Object.values(suitCounts), 0);
+    const hasFlushDraw = maxSuitCount === 4 && (roomPublic?.communityCards?.length || 0) < 5;
+
+    let winProbability = 0;
+    if (evaluation.rankValue === 0) winProbability = 15;
+    else if (evaluation.rankValue === 1) winProbability = 45;
+    else if (evaluation.rankValue === 2) winProbability = 70;
+    else if (evaluation.rankValue === 3) winProbability = 85;
+    else winProbability = 95;
+
+    if (hasFlushDraw) winProbability += 15;
+
+    let helperText = '';
+    if (hasFlushDraw) helperText = 'รอไพ่ทำ Flush (สีเดียวกัน)!';
+    else if (evaluation.rankValue >= 2) helperText = 'ไพ่คุณแข็งแกร่งมาก!';
+    else if (evaluation.rankValue === 1) helperText = 'คุณมี 1 คู่ ลุ้นตองหรือสองคู่!';
+    else helperText = 'รอไพ่เข้าคู่';
+
+    return { handName: evaluation.handName, winProbability: Math.min(99, winProbability), helperText };
+  };
+  const oddsData = getHandOdds();
 
   // Render a specific card
   const renderCard = (card: Card | null | undefined, key: number | string) => {
@@ -226,7 +309,7 @@ function GameApp() {
           <div className="p-2 bg-gradient-to-tr from-amber-600 to-amber-400 rounded-xl shadow-lg">
             <ShieldCheck className="h-5 w-5 text-slate-950" />
           </div>
-          <h1 className="text-xl font-bold text-amber-500 hidden sm:block">โป๊กเกอร์ รอยัล</h1>
+          <h1 className="text-xl font-bold text-amber-500 hidden sm:block">PokerGG</h1>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-slate-400">รหัสห้อง: <strong className="text-amber-500 font-mono text-lg tracking-wider">{roomPublic?.inviteCode || currentRoomId}</strong></span>
@@ -373,6 +456,18 @@ function GameApp() {
                   </div>
                 </div>
 
+                {oddsData && !heroPlayer.isFolded && (
+                  <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-[300px] bg-slate-900/90 border border-emerald-500/30 rounded-xl p-3 shadow-lg backdrop-blur text-center">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">{oddsData.handName}</span>
+                      <span className="text-xs font-black text-amber-400">โอกาสชนะ {oddsData.winProbability}%</span>
+                    </div>
+                    <div className="text-xs text-slate-300 bg-slate-950/50 py-1 rounded border border-slate-800">
+                      💡 {oddsData.helperText}
+                    </div>
+                  </div>
+                )}
+
                 {heroPlayer.isFolded && (
                    <div className="absolute inset-0 bg-slate-950/80 rounded-2xl flex items-center justify-center text-lg font-black uppercase tracking-widest text-slate-400 z-30">
                      หมอบแล้ว
@@ -399,6 +494,19 @@ function GameApp() {
                   {isLoading ? <Loader2 className="animate-spin" size={18} /> : <Play size={18} />}
                   เริ่มเกม / แจกไพ่
                 </button>
+                <button
+                  onClick={async () => {
+                     setIsLoading(true);
+                     try {
+                       await fetch(`/api/rooms/${currentRoomId}/add-bot`, { method: 'POST', headers: { Authorization: `Bearer ${authUser?.token}` } });
+                       await fetchRoomState(currentRoomId!);
+                     } finally { setIsLoading(false); }
+                  }}
+                  disabled={isLoading || playerList.length >= 5}
+                  className="w-full mt-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 rounded-xl border border-slate-700 transition-all flex items-center justify-center gap-2 text-sm"
+                >
+                  + เพิ่มบอท 🤖
+                </button>
                 {playerList.length < 2 && (
                   <div className="text-[10px] text-rose-400 mt-2">ต้องการผู้เล่นอย่างน้อย 2 คนเพื่อเริ่มเกม</div>
                 )}
@@ -423,15 +531,18 @@ function GameApp() {
                   <strong className="text-emerald-400 font-mono">${Math.max(0, roomPublic.currentBet - (heroPlayer?.currentBet || 0))}</strong>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => submitAction('FOLD')} disabled={isLoading} className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2 rounded-lg text-sm transition-colors border border-slate-700">หมอบ</button>
-                  <button 
-                    onClick={() => submitAction('CHECK')} 
-                    disabled={isLoading || (heroPlayer?.currentBet || 0) < roomPublic.currentBet} 
-                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2 rounded-lg text-sm transition-colors border border-slate-700 disabled:opacity-30"
-                  >
-                    ผ่าน
-                  </button>
+                <div className="grid grid-cols-1 gap-2">
+                  {Math.max(0, roomPublic.currentBet - (heroPlayer?.currentBet || 0)) === 0 ? (
+                    <button 
+                      onClick={() => submitAction('CHECK')} 
+                      disabled={isLoading} 
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2 rounded-lg text-sm transition-colors border border-slate-700"
+                    >
+                      ผ่าน (Check)
+                    </button>
+                  ) : (
+                    <button onClick={() => submitAction('FOLD')} disabled={isLoading} className="bg-slate-800 hover:bg-slate-700 text-rose-400 font-bold py-2 rounded-lg text-sm transition-colors border border-slate-700">หมอบ (Fold)</button>
+                  )}
                 </div>
                 
                 <button 

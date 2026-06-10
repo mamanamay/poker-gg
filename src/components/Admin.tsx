@@ -50,6 +50,38 @@ export default function Admin({ user, onLogout }: AdminProps) {
     }
   };
 
+  const kickPlayer = async (roomId: string, playerId: string) => {
+    if (!window.confirm(`ต้องการเตะผู้เล่นคนนี้ออกจากห้อง?`)) return;
+    try {
+      await fetch(`/api/rooms/${roomId}/admin/kick/${playerId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${user.token}` }
+      });
+      fetchRooms();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const rigDeck = async (roomId: string, winnerId: string) => {
+    if (!window.confirm(`ต้องการล็อกผลให้ผู้เล่นคนนี้ชนะในตาถัดไป/ตานี้ ใช่หรือไม่?`)) return;
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/admin/rig`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.token}` 
+        },
+        body: JSON.stringify({ winnerId })
+      });
+      const data = await res.json();
+      if (res.ok) alert(data.message);
+      else alert(data.error);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <header className="bg-slate-900 border-b border-amber-900/30 p-4">
@@ -122,6 +154,36 @@ export default function Admin({ user, onLogout }: AdminProps) {
                       <Users size={14} className="text-slate-500" /> {room.playerCount}/6
                     </span>
                   </div>
+                  {/* Players List */}
+                  {room.players && room.players.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-slate-800 space-y-2">
+                      <div className="text-xs font-bold text-amber-500 mb-2">จัดการผู้เล่น / ล็อกผล:</div>
+                      {room.players.map((p: any) => (
+                        <div key={p.id} className="flex items-center justify-between bg-slate-950 p-2 rounded-lg text-xs">
+                          <span className="text-slate-300 font-medium truncate w-24" title={p.name}>
+                            {p.isBot ? '🤖' : '👤'} {p.name}
+                          </span>
+                          <span className="text-emerald-400 font-mono">${p.chips}</span>
+                          <div className="flex gap-1">
+                            <button 
+                              onClick={() => rigDeck(room.roomId, p.id)}
+                              className="px-2 py-1 bg-amber-500/20 text-amber-500 hover:bg-amber-500 hover:text-slate-900 rounded transition-colors"
+                              title="ให้คนนี้ชนะ (God Mode)"
+                            >
+                              👑
+                            </button>
+                            <button 
+                              onClick={() => kickPlayer(room.roomId, p.id)}
+                              className="px-2 py-1 bg-rose-500/20 text-rose-500 hover:bg-rose-500 hover:text-white rounded transition-colors"
+                              title="เตะออก"
+                            >
+                              ❌
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-4 border-t border-slate-800 flex justify-end">

@@ -65,6 +65,9 @@ export default function Lobby({ user, onJoinRoom, onLogout }: LobbyProps) {
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
       <div className="absolute top-4 right-4 flex items-center gap-4">
         <span className="text-slate-400 text-sm">ผู้เล่น: <strong className="text-amber-500">{user.displayName}</strong></span>
+        <span className="bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 text-emerald-400 font-bold font-mono text-xs">
+          ${user.chips || 0}
+        </span>
         <button 
           onClick={onLogout}
           className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors text-xs font-medium border border-slate-700"
@@ -81,7 +84,7 @@ export default function Lobby({ user, onJoinRoom, onLogout }: LobbyProps) {
       >
         <div className="text-center mb-10">
           <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-amber-600 mb-2 drop-shadow-sm">
-            โป๊กเกอร์ รอยัล
+            PokerGG
           </h1>
           <p className="text-slate-400">สร้างห้องเล่นกับเพื่อน เข้าร่วมห้อง หรือเล่นกับบอท</p>
         </div>
