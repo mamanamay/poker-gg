@@ -1029,6 +1029,13 @@ function checkBustedPlayers(room: RoomInternal) {
   Object.values(room.players).forEach(p => {
     if (p.chips < 100) {
       bustedPlayerIds.push(p.id);
+      
+      // Force sync their empty chips before removing them
+      if (!p.isBot && users[p.id]) {
+        users[p.id].chips = p.chips;
+        if (db) db.collection('users').doc(p.id).update({ chips: p.chips }).catch(() => {});
+      }
+
       delete room.players[p.id];
     }
   });
