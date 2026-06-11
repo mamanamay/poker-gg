@@ -229,7 +229,7 @@ app.post('/api/register', async (req, res) => {
   res.json({
     user: {
       id,
-      username: user.username,
+      username: newUser.username,
       role: 'player',
       displayName: newUser.displayName,
       token,
@@ -473,7 +473,7 @@ app.post('/api/rooms/join', (req, res) => {
   }
 
   // Find standard seat placement
-  const seatIndexes = Object.values(room.players).map(p => p.seatIndex);
+  const seatIndexes = (Object.values(room.players) as Player[]).map(p => p.seatIndex);
   let seat = 0;
   while (seatIndexes.includes(seat)) {
     seat++;
@@ -1013,15 +1013,11 @@ function checkBustedPlayers(room: RoomInternal) {
     }
   });
 
-  if (bustedPlayerIds.length > 0) {
-    room.playerIds = room.playerIds.filter(id => !bustedPlayerIds.includes(id));
-  }
-
   // Re-add bots if we kicked any
   bustedPlayerIds.forEach(id => {
     if (id.startsWith('bot-')) {
        // add new bot
-       if (room.playerIds.length < 5) {
+       if (Object.keys(room.players).length < 5) {
          const newBotId = `bot-${crypto.randomBytes(4).toString('hex')}`;
          const usedNames = Object.values(room.players).map(pl => pl.name);
          const availableNames = GREEK_ALPHABET.filter(n => !usedNames.includes(`Bot ${n}`));
@@ -1033,22 +1029,30 @@ function checkBustedPlayers(room: RoomInternal) {
             chips: 5000,
             isBot: true,
             seatIndex: -1,
-            cards: [],
             currentBet: 0,
             isFolded: false,
             isAllIn: false,
+            isActive: false,
             lastAction: '',
-            lastActionAmount: 0,
-            isActive: false
+            lastActionAmount: 0
          };
+         
+         // Assign seat
+         const occupiedSeats = Object.values(room.players).map(p => p.seatIndex);
+         for (let i = 0; i < 6; i++) {
+           if (!occupiedSeats.includes(i)) {
+             newBot.seatIndex = i;
+             break;
+           }
+         }
+         
          room.players[newBotId] = newBot;
-         room.playerIds.push(newBotId);
        }
     }
   });
 
   // Re-assign seat indexes for remaining
-  room.playerIds.forEach((pid, index) => {
+  Object.keys(room.players).forEach((pid, index) => {
     if (room.players[pid]) {
       room.players[pid].seatIndex = index;
     }

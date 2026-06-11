@@ -4,7 +4,6 @@ import { Card, Player, RoomPublicState, PlayerActionType, AuthUser } from './typ
 import Login from './components/Login';
 import Admin from './components/Admin';
 import Lobby from './components/Lobby';
-import ErrorBoundary from './components/ErrorBoundary';
 import { evaluate7CardHand } from './poker';
 
 const SUIT_SYMBOLS: Record<string, { symbol: string, color: string }> = {
@@ -15,9 +14,9 @@ const SUIT_SYMBOLS: Record<string, { symbol: string, color: string }> = {
 };
 
 class ErrorBoundary extends React.Component<any, { hasError: boolean, error: any }> {
+  state = { hasError: false, error: null };
   constructor(props: any) {
     super(props);
-    this.state = { hasError: false, error: null };
   }
   static getDerivedStateFromError(error: any) {
     return { hasError: true, error };
@@ -35,7 +34,7 @@ class ErrorBoundary extends React.Component<any, { hasError: boolean, error: any
         </div>
       );
     }
-    return this.props.children;
+    return (this as any).props.children;
   }
 }
 
@@ -154,12 +153,13 @@ function GameApp() {
 
   useEffect(() => {
     if (!roomPublic || !currentRoomId) return;
-    const activePlayer = players[roomPublic.activePlayerId || ''];
+    const activePlayer = players[roomPublic.activePlayerId || ''] as Player | undefined;
     if (activePlayer && activePlayer.isBot && roomPublic.status !== 'SHOWDOWN' && roomPublic.status !== 'LOBBY') {
       const timer = setTimeout(() => {
         triggerBotAction();
       }, 500);
       return () => clearTimeout(timer);
+    }
   }, [roomPublic?.activePlayerId, roomPublic?.status]);
 
   // Handle kick out if busted
@@ -267,7 +267,7 @@ function GameApp() {
   }
 
   // --- GAME RENDERING LOGIC ---
-  const playerList = Object.values(players).sort((a, b) => a.seatIndex - b.seatIndex);
+  const playerList = (Object.values(players) as Player[]).sort((a, b) => a.seatIndex - b.seatIndex);
   const heroIndex = playerList.findIndex(p => p.id === authUser.id);
   const heroPlayer = players[authUser.id];
 
@@ -505,7 +505,6 @@ function GameApp() {
               </div>
           )}
           </div>
-          </div>
         </div>
 
         {/* Right Panel: Controls & Logs */}
@@ -567,7 +566,7 @@ function GameApp() {
                   เริ่มเกมตาต่อไป
                 </button>
               </div>
-            ) : (roomPublic?.activePlayerId && roomPublic.activePlayerId === heroPlayer?.id) ? (
+            ) : (roomPublic?.activePlayerId && (players[roomPublic.activePlayerId] as Player)?.id === heroPlayer?.id) ? (
               <div className="space-y-3 animate-in slide-in-from-right duration-300">
                 <div className="text-xs font-bold text-amber-400 text-center animate-pulse border border-amber-500/20 bg-amber-500/5 rounded-lg py-1">ตาของคุณแล้ว! เลือกลงเงิน</div>
                 
