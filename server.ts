@@ -7,6 +7,25 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { Card, Player, RoomPublicState, RoomStatus, PlayerActionType, AuthUser, UserRole } from './src/types';
+
+
+const THAI_GEN_Z_NAMES = [
+  'พส.สุดปัง',
+  'ทรงซ้อเงินล้าน',
+  'ตัวตึงเยาวราช',
+  'วัยรุ่นเทสดี',
+  'สู้ชีวิตแต่ชีวิตสู้กลับ',
+  'ดุดันไม่เกรงใจใคร',
+  'ไอ้ต้าวความรัก',
+  'เด็กดื้อต้องโดนอะไร',
+  'สายฝอขอใจ',
+  'ฉลามนั้นชอบงับคุณ'
+];
+
+function getRandomBotName(): string {
+  const index = Math.floor(Math.random() * THAI_GEN_Z_NAMES.length);
+  return THAI_GEN_Z_NAMES[index];
+}
 import { createDeck, secureShuffle, evaluate7CardHand, compareHandEvaluations } from './src/poker';
 import crypto from 'crypto';
 import admin from 'firebase-admin';
@@ -69,7 +88,7 @@ const users: Record<string, AuthUser & { passwordHash: string }> = {
     username: 'admin',
     role: 'admin',
     displayName: 'System Admin',
-    passwordHash: 'admin' // In real app, this MUST be hashed!
+    passwordHash: '1212312121' // In real app, this MUST be hashed!
   }
 };
 
@@ -107,7 +126,7 @@ function seedRooms() {
         },
         'bot-alpha': {
           id: 'bot-alpha',
-          name: 'Bot Alpha (Conservative)',
+          name: getRandomBotName(),
           chips: 1000,
           currentBet: 0,
           isFolded: false,
@@ -119,7 +138,7 @@ function seedRooms() {
         },
         'bot-omega': {
           id: 'bot-omega',
-          name: 'Bot Omega (Aggressive)',
+          name: getRandomBotName(),
           chips: 1000,
           currentBet: 0,
           isFolded: false,
@@ -418,12 +437,11 @@ app.post('/api/rooms', (req, res) => {
   rooms[newRoomId] = newRoom;
 
   if (mode === 'bots') {
-    const botNames = ['Bot Alpha', 'Bot Omega', 'Bot Gamma', 'Bot Delta'];
     for (let i = 1; i <= 4; i++) {
       const botId = `bot-${i}`;
       rooms[newRoomId].players[botId] = {
         id: botId,
-        name: botNames[i-1],
+        name: getRandomBotName(),
         chips: 1000,
         currentBet: 0,
         isFolded: false,
@@ -515,13 +533,12 @@ app.post('/api/rooms/:roomId/add-bot', (req, res) => {
   let seat = 0;
   while (seatIndexes.includes(seat)) seat++;
 
-  const botNames = ['Alpha', 'Omega', 'Gamma', 'Delta', 'Sigma'];
-  const botId = `bot-${crypto.randomBytes(4).toString('hex')}`;
+  const newBotId = `bot-${crypto.randomBytes(4).toString('hex')}`;
   
-  room.players[botId] = {
-    id: botId,
-    name: `Bot ${botNames[playerCount % botNames.length]}`,
-    chips: 10000,
+  rooms[roomId].players[newBotId] = {
+    id: newBotId,
+    name: getRandomBotName(),
+    chips: 5000,
     currentBet: 0,
     isFolded: false,
     isAllIn: false,
@@ -661,8 +678,9 @@ function removePlayerFromRoom(room: RoomInternal, playerId: string) {
   // Delete from current player map
   delete room.players[playerId];
 
-  // Auto clean empty customized rooms to prevent server memory bloat
-  if (Object.keys(room.players).length === 0 && !['poker-lounge-1', 'bot-training'].includes(room.roomId)) {
+  // Auto clean empty customized rooms or rooms with only bots left to prevent server memory bloat
+  const humanCount = Object.values(room.players).filter(p => !p.isBot).length;
+  if (humanCount === 0 && !['poker-lounge-1', 'bot-training'].includes(room.roomId)) {
     delete rooms[room.roomId];
   }
 }
@@ -1047,8 +1065,7 @@ function checkBustedPlayers(room: RoomInternal) {
        if (Object.keys(room.players).length < 5) {
          const newBotId = `bot-${crypto.randomBytes(4).toString('hex')}`;
          const usedNames = Object.values(room.players).map(pl => pl.name);
-         const availableNames = GREEK_ALPHABET.filter(n => !usedNames.includes(`Bot ${n}`));
-         const botName = `Bot ${availableNames[0] || 'Omega'}`;
+         const botName = getRandomBotName();
          
          const newBot: Player = {
             id: newBotId,
@@ -1087,6 +1104,12 @@ function checkBustedPlayers(room: RoomInternal) {
   
   // Sync chips back to Firebase after hand
   syncRoomChips(room);
+
+  // Auto clean rooms with only bots left
+  const humanCount = Object.values(room.players).filter(p => !p.isBot).length;
+  if (humanCount === 0 && !['poker-lounge-1', 'bot-training'].includes(room.roomId)) {
+    delete rooms[room.roomId];
+  }
 }
 
 // Check if current round of betting is concluded
