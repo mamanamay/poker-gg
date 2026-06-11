@@ -974,9 +974,9 @@ function evaluateShowdown(room: RoomInternal) {
   room.winnerIds = winnerIds;
   
   if (winners.length === 1) {
-    room.winDesc = `${winners[0].name} wins pot of ${winnerShare} chips with ${bestEval.handName}!`;
+    room.winDesc = `${winners[0].name} ชนะเงินกองกลาง $${winnerShare} ด้วยไพ่ ${bestEval.handName}!`;
   } else {
-    room.winDesc = `Split pot between ${winners.map(w => w.name).join(' & ')}! Each wins ${winnerShare} chips with ${bestEval.handName}.`;
+    room.winDesc = `แบ่งเงินกองกลางระหว่าง ${winners.map(w => w.name).join(' และ ')}! ได้ไปคนละ $${winnerShare} ด้วยไพ่ ${bestEval.handName}`;
   }
 
   // Check for busted players
@@ -985,22 +985,54 @@ function evaluateShowdown(room: RoomInternal) {
 
 // Scans active players for chip bankruptcy and kicks or flags them for card Color guess mini-game
 function checkBustedPlayers(room: RoomInternal) {
+  const GREEK_ALPHABET = ['Alpha','Beta','Gamma','Delta','Epsilon','Zeta','Eta','Theta','Iota','Kappa','Lambda','Mu','Nu','Xi','Omicron','Pi','Rho','Sigma','Tau','Upsilon','Phi','Chi','Psi','Omega'];
+  const bustedPlayerIds: string[] = [];
+
   Object.values(room.players).forEach(p => {
     if (p.chips <= 0) {
-      if (p.isBot) {
-        // Automatically replenish bots to keep table going
-        p.chips = 1000;
-        p.lastAction = '';
-        p.isFolded = false;
-        p.isAllIn = false;
-        p.isActive = false;
-      } else {
-        // Flag player as booted / busted to trigger color choice mini-game on client
-        p.isFolded = true;
-        p.lastAction = 'FOLD';
-        p.isActive = false;
-        (p as any).isBusted = true;
-      }
+      bustedPlayerIds.push(p.id);
+      delete room.players[p.id];
+    }
+  });
+
+  if (bustedPlayerIds.length > 0) {
+    room.playerIds = room.playerIds.filter(id => !bustedPlayerIds.includes(id));
+  }
+
+  // Re-add bots if we kicked any
+  bustedPlayerIds.forEach(id => {
+    if (id.startsWith('bot-')) {
+       // add new bot
+       if (room.playerIds.length < 5) {
+         const newBotId = `bot-${crypto.randomBytes(4).toString('hex')}`;
+         const usedNames = Object.values(room.players).map(pl => pl.name);
+         const availableNames = GREEK_ALPHABET.filter(n => !usedNames.includes(`Bot ${n}`));
+         const botName = `Bot ${availableNames[0] || 'Omega'}`;
+         
+         const newBot: Player = {
+            id: newBotId,
+            name: botName,
+            chips: 5000,
+            isBot: true,
+            seatIndex: -1,
+            cards: [],
+            currentBet: 0,
+            isFolded: false,
+            isAllIn: false,
+            lastAction: '',
+            lastActionAmount: 0,
+            isActive: false
+         };
+         room.players[newBotId] = newBot;
+         room.playerIds.push(newBotId);
+       }
+    }
+  });
+
+  // Re-assign seat indexes for remaining
+  room.playerIds.forEach((pid, index) => {
+    if (room.players[pid]) {
+      room.players[pid].seatIndex = index;
     }
   });
   
@@ -1448,6 +1480,92 @@ app.post('/api/rooms/:roomId/bot-action', (req, res) => {
     log: finalLog
   });
 });
+// --- CHIP REQUEST SYSTEM ---
+app.post('/api/chips/request', authenticate, async (req: express.Request, res: express.Response) => {
+  const user = (req as any).user;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  if (!db) return res.status(500).json({ error: 'Database not initialized' });
+
+  try {
+    const requestDoc = {
+      userId: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    await db.collection('chip_requests').add(requestDoc);
+    res.json({ success: true, message: 'ส่งคำขอเครดิตเรียบร้อยแล้ว' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/chips/requests', authenticate, async (req: express.Request, res: express.Response) => {
+  const user = (req as any).user;
+  if (!user || user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  if (!db) return res.json([]);
+
+  try {
+    const snap = await db.collection('chip_requests').where('status', '==', 'pending').get();
+    const requests = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json(requests);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch requests' });
+  }
+});
+
+app.post('/api/chips/requests/:id/approve', authenticate, async (req: express.Request, res: express.Response) => {
+  const user = (req as any).user;
+  if (!user || user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  if (!db) return res.status(500).json({ error: 'DB error' });
+
+  const { id } = req.params;
+  const { amount } = req.body;
+  const addAmount = Number(amount) || 10000;
+
+  try {
+    const docRef = db.collection('chip_requests').doc(id);
+    const doc = await docRef.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Request not found' });
+
+    const data = doc.data();
+    if (data?.status !== 'pending') return res.status(400).json({ error: 'Already processed' });
+
+    await docRef.update({ status: 'approved', approvedAt: new Date().toISOString() });
+
+    // Add chips to user
+    const targetUserId = data?.userId;
+    if (users[targetUserId]) {
+      users[targetUserId].chips += addAmount;
+    }
+    const userDocRef = db.collection('users').doc(targetUserId);
+    const userDoc = await userDocRef.get();
+    if (userDoc.exists) {
+      await userDocRef.update({ chips: (userDoc.data()?.chips || 0) + addAmount });
+    }
+
+    res.json({ success: true, message: `อนุมัติเครดิต ${addAmount} ชิป สำเร็จ` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/chips/requests/:id/reject', authenticate, async (req: express.Request, res: express.Response) => {
+  const user = (req as any).user;
+  if (!user || user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  if (!db) return res.status(500).json({ error: 'DB error' });
+
+  const { id } = req.params;
+  try {
+    const docRef = db.collection('chip_requests').doc(id);
+    await docRef.update({ status: 'rejected', rejectedAt: new Date().toISOString() });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
 
 // Serve frontend assets
 async function startServer() {

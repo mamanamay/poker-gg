@@ -312,9 +312,9 @@ function GameApp() {
           <h1 className="text-xl font-bold text-amber-500 hidden sm:block">PokerGG</h1>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-right hidden sm:block">
-            <div className="text-sm font-bold text-slate-200">{roomPublic?.roomName || `ห้อง ${currentRoomId}`}</div>
-            <div className="text-[10px] text-slate-400 font-mono tracking-wider">ID: {currentRoomId} {roomPublic?.hasPassword && '🔒'}</div>
+          <div className="text-right hidden sm:block bg-slate-950/50 px-4 py-1.5 rounded-lg border border-slate-800">
+            <div className="text-sm font-bold text-amber-500">{roomPublic?.roomName || `ห้อง ${currentRoomId}`} {roomPublic?.hasPassword && '🔒'}</div>
+            <div className="text-xs text-emerald-400 font-mono tracking-wider font-bold">รหัสเชิญ: {currentRoomId}</div>
           </div>
           <button 
             onClick={handleLeaveRoom}
@@ -330,21 +330,21 @@ function GameApp() {
       <main className="flex-1 flex flex-col lg:flex-row relative overflow-hidden bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black">
         
         {/* Left/Top: Poker Table */}
-        <div className="flex-1 flex flex-col items-center justify-center p-4 relative min-h-[70vh]">
+        <div className="flex-1 flex flex-col items-center justify-between p-4 sm:p-8 relative min-h-[70vh] overflow-y-auto">
           {/* Table Surface */}
-          <div className="absolute inset-4 sm:inset-12 bg-gradient-to-b from-emerald-900 to-emerald-950 rounded-[100px] border-[12px] border-slate-800 shadow-[inset_0_0_50px_rgba(0,0,0,0.8)] opacity-90"></div>
+          <div className="absolute inset-4 sm:inset-12 bg-gradient-to-b from-emerald-900 to-emerald-950 rounded-[100px] border-[12px] border-slate-800 shadow-[inset_0_0_50px_rgba(0,0,0,0.8)] opacity-90 pointer-events-none"></div>
 
           {/* Top/Side Players (Opponents) */}
-          <div className="w-full max-w-4xl flex flex-wrap justify-center gap-6 sm:gap-16 z-10 absolute top-8 sm:top-16">
+          <div className="w-full max-w-4xl flex flex-wrap justify-center gap-4 sm:gap-12 z-10 pt-4">
             {playerList.map((p) => {
               if (p.id === authUser.id) return null; // Don't render hero here
               const isActive = roomPublic?.activePlayerId === p.id;
               const isDealer = roomPublic?.dealerIndex === p.seatIndex;
 
               return (
-                <div key={p.id} className={`relative flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl border-2 transition-all ${isActive ? 'bg-slate-800/90 border-amber-500 ring-2 ring-amber-500/30 shadow-xl scale-105' : 'bg-slate-950/70 border-slate-800'}`}>
+                <div key={p.id} className={`relative flex flex-col items-center justify-center p-2 sm:p-3 rounded-xl border-2 transition-all ${isActive ? 'bg-slate-800/90 border-amber-500 ring-2 ring-amber-500/30 shadow-xl scale-105' : 'bg-slate-950/70 border-slate-800'} min-w-[100px]`}>
                   {/* Status Badge */}
-                  <span className="absolute -top-3 bg-slate-800 text-[10px] py-0.5 px-2.5 rounded-full border border-slate-700 flex items-center gap-1.5 font-bold">
+                  <span className="absolute -top-3 bg-slate-800 text-[10px] py-0.5 px-2.5 rounded-full border border-slate-700 flex items-center gap-1.5 font-bold whitespace-nowrap">
                     {p.isBot ? <Bot size={12} className="text-sky-400" /> : <User size={12} className="text-emerald-400" />}
                     {p.name}
                   </span>
@@ -369,7 +369,7 @@ function GameApp() {
                   <div className="flex gap-1.5 mt-2">
                     {roomPublic?.status === 'SHOWDOWN' && showdownHoleCards[p.id] ? (
                       showdownHoleCards[p.id].map((c, i) => renderCard(c, i))
-                    ) : roomPublic?.status !== 'LOBBY' ? (
+                    ) : roomPublic?.status !== 'LOBBY' && !p.isFolded ? (
                       <>
                         {renderHiddenCard(1)}
                         {renderHiddenCard(2)}
@@ -378,7 +378,7 @@ function GameApp() {
                   </div>
 
                   {isDealer && (
-                    <div className="absolute -right-3 top-1/2 -translate-y-1/2 rounded-full w-6 h-6 bg-amber-500 border-2 border-slate-950 text-slate-950 font-black text-[10px] flex items-center justify-center shadow-lg">
+                    <div className="absolute -right-3 top-1/2 -translate-y-1/2 rounded-full w-5 h-5 bg-amber-500 border-2 border-slate-950 text-slate-950 font-black text-[9px] flex items-center justify-center shadow-lg">
                       D
                     </div>
                   )}
@@ -388,7 +388,7 @@ function GameApp() {
           </div>
 
           {/* Center Community Board */}
-          <div className="z-10 bg-slate-900/60 backdrop-blur-sm border border-emerald-500/20 rounded-3xl p-4 sm:p-6 shadow-2xl min-w-[280px] sm:min-w-[400px] flex flex-col items-center absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+          <div className="z-10 bg-slate-900/60 backdrop-blur-sm border border-emerald-500/20 rounded-3xl p-4 sm:p-6 shadow-2xl min-w-[280px] sm:min-w-[400px] flex flex-col items-center my-8">
             <div className="text-center mb-3">
               <div className="text-[10px] text-emerald-400/80 font-mono uppercase tracking-widest mb-1">เงินกองกลาง (Pot)</div>
               <div className="text-3xl font-black text-amber-400 drop-shadow-md font-mono">${roomPublic?.pot || 0}</div>
@@ -417,15 +417,15 @@ function GameApp() {
           </div>
 
           {/* Hero Player (Bottom) */}
+          <div className="z-20 w-full flex justify-center pb-4">
           {heroPlayer && (
-            <div className="absolute bottom-4 sm:bottom-8 z-20">
               <div className={`relative flex flex-col items-center p-4 sm:p-6 rounded-2xl border-2 transition-all ${
                   roomPublic?.activePlayerId === heroPlayer.id 
                     ? 'bg-slate-800 border-amber-500 ring-4 ring-amber-500/20 shadow-2xl scale-105' 
                     : 'bg-slate-900 border-slate-700 shadow-xl'
                 }`}>
                 
-                <span className="absolute -top-4 bg-emerald-600 text-[11px] py-1 px-4 rounded-full border-2 border-slate-900 text-white font-bold shadow-md">
+                <span className="absolute -top-4 bg-emerald-600 text-[11px] py-1 px-4 rounded-full border-2 border-slate-900 text-white font-bold shadow-md whitespace-nowrap">
                   {heroPlayer.name} (คุณ)
                 </span>
 
@@ -460,7 +460,7 @@ function GameApp() {
                 </div>
 
                 {oddsData && !heroPlayer.isFolded && (
-                  <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-[300px] bg-slate-900/90 border border-emerald-500/30 rounded-xl p-3 shadow-lg backdrop-blur text-center">
+                  <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-[300px] bg-slate-900/90 border border-emerald-500/30 rounded-xl p-3 shadow-lg backdrop-blur text-center z-30">
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">{oddsData.handName}</span>
                       <span className="text-xs font-black text-amber-400">โอกาสชนะ {oddsData.winProbability}%</span>
@@ -477,8 +477,8 @@ function GameApp() {
                    </div>
                 )}
               </div>
-            </div>
           )}
+          </div>
         </div>
 
         {/* Right Panel: Controls & Logs */}

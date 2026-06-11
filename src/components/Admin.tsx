@@ -11,6 +11,9 @@ interface AdminProps {
 export default function Admin({ user, onLogout }: AdminProps) {
   const [rooms, setRooms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'rooms' | 'requests'>('rooms');
+  const [requests, setRequests] = useState<any[]>([]);
+  const [approveAmount, setApproveAmount] = useState<Record<string, number>>({});
 
   const fetchRooms = async () => {
     setLoading(true);
@@ -31,8 +34,23 @@ export default function Admin({ user, onLogout }: AdminProps) {
     }
   };
 
+  const fetchRequests = async () => {
+    try {
+      const res = await fetch('/api/chips/requests', {
+        headers: { 'Authorization': `Bearer ${user.token}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setRequests(data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     fetchRooms();
+    fetchRequests();
   }, []);
 
   const deleteRoom = async (roomId: string) => {
@@ -105,9 +123,22 @@ export default function Admin({ user, onLogout }: AdminProps) {
 
       <main className="max-w-6xl mx-auto p-6 mt-8">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-slate-100">ห้องเล่นเกมที่กำลังทำงาน</h2>
+          <div className="flex gap-4 border-b border-slate-800 pb-2 w-full max-w-md">
+            <button
+              onClick={() => setActiveTab('rooms')}
+              className={`pb-2 text-lg font-bold px-4 transition-colors ${activeTab === 'rooms' ? 'text-amber-500 border-b-2 border-amber-500' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              จัดการห้อง ({rooms.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('requests')}
+              className={`pb-2 text-lg font-bold px-4 transition-colors relative ${activeTab === 'requests' ? 'text-amber-500 border-b-2 border-amber-500' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              คำขอเครดิต {requests.length > 0 && <span className="absolute top-0 right-0 bg-rose-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">{requests.length}</span>}
+            </button>
+          </div>
           <button 
-            onClick={fetchRooms}
+            onClick={() => { fetchRooms(); fetchRequests(); }}
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl transition-colors disabled:opacity-50 text-sm font-medium border border-slate-700"
           >
@@ -115,6 +146,64 @@ export default function Admin({ user, onLogout }: AdminProps) {
             รีเฟรช
           </button>
         </div>
+
+        {activeTab === 'requests' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg">
+            <h3 className="font-bold text-amber-500 text-xl mb-4">รายการขอเครดิตรอการอนุมัติ</h3>
+            {requests.length === 0 ? (
+              <div className="text-center text-slate-500 py-8">ไม่มีคำขอเครดิตที่รอดำเนินการ</div>
+            ) : (
+              <div className="space-y-4">
+                {requests.map(req => (
+                  <div key={req.id} className="flex flex-col sm:flex-row items-center justify-between bg-slate-950 p-4 rounded-xl border border-slate-800">
+                    <div>
+                      <div className="font-bold text-slate-200">{req.displayName}</div>
+                      <div className="text-xs text-slate-500">ID: {req.userId} | เมื่อ: {new Date(req.createdAt).toLocaleString('th-TH')}</div>
+                    </div>
+                    <div className="flex gap-2 items-center mt-4 sm:mt-0">
+                      <input 
+                        type="number" 
+                        value={approveAmount[req.id] || 10000} 
+                        onChange={(e) => setApproveAmount({ ...approveAmount, [req.id]: Number(e.target.value) })}
+                        className="w-24 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 text-sm text-center"
+                      />
+                      <button 
+                        onClick={async () => {
+                           if (!window.confirm(`อนุมัติ ${approveAmount[req.id] || 10000} ชิปให้ ${req.displayName}?`)) return;
+                           await fetch(`/api/chips/requests/${req.id}/approve`, {
+                             method: 'POST',
+                             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
+                             body: JSON.stringify({ amount: approveAmount[req.id] || 10000 })
+                           });
+                           fetchRequests();
+                        }}
+                        className="px-4 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white rounded-lg text-sm font-bold transition-colors"
+                      >
+                        อนุมัติ
+                      </button>
+                      <button 
+                        onClick={async () => {
+                           if (!window.confirm('ปฏิเสธคำขอนี้?')) return;
+                           await fetch(`/api/chips/requests/${req.id}/reject`, {
+                             method: 'POST',
+                             headers: { 'Authorization': `Bearer ${user.token}` }
+                           });
+                           fetchRequests();
+                        }}
+                        className="px-4 py-1.5 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 rounded-lg text-sm font-bold transition-colors"
+                      >
+                        ปฏิเสธ
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'rooms' && (
+          <>
 
         {loading ? (
           <div className="flex justify-center items-center py-20 text-slate-500">
@@ -198,6 +287,8 @@ export default function Admin({ user, onLogout }: AdminProps) {
               </motion.div>
             ))}
           </div>
+        )}
+        </>
         )}
       </main>
     </div>

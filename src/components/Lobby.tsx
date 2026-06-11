@@ -84,6 +84,19 @@ export default function Lobby({ user, onJoinRoom, onLogout }: LobbyProps) {
       setJoinPassword('');
     }
   };
+  const handleRequestChips = async () => {
+    try {
+      const res = await fetch('/api/chips/request', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${user.token}` }
+      });
+      const data = await res.json();
+      if (res.ok) alert(data.message || 'ส่งคำขอสำเร็จ กรุณารอ Admin อนุมัติ');
+      else alert(data.error || 'เกิดข้อผิดพลาด');
+    } catch (err) {
+      alert('เกิดข้อผิดพลาดในการส่งคำขอ');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
@@ -92,6 +105,14 @@ export default function Lobby({ user, onJoinRoom, onLogout }: LobbyProps) {
         <span className="bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 text-emerald-400 font-bold font-mono text-xs">
           ${user.chips || 0}
         </span>
+        {(user.chips || 0) < 1000 && (
+          <button 
+            onClick={handleRequestChips}
+            className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white rounded-lg transition-colors text-xs font-bold border border-emerald-500/30"
+          >
+            ขอเพิ่มเครดิต
+          </button>
+        )}
         <button 
           onClick={onLogout}
           className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors text-xs font-medium border border-slate-700"
