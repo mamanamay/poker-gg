@@ -1007,7 +1007,7 @@ function checkBustedPlayers(room: RoomInternal) {
   const bustedPlayerIds: string[] = [];
 
   Object.values(room.players).forEach(p => {
-    if (p.chips <= 0) {
+    if (p.chips < 100) {
       bustedPlayerIds.push(p.id);
       delete room.players[p.id];
     }
