@@ -87,10 +87,26 @@ export default function Lobby({ user, onJoinRoom, onLogout }: LobbyProps) {
     }
   };
   const handleRequestChips = async () => {
+    if ((user.chips || 0) > 1000) {
+      alert('ชิปของคุณยังมีมากกว่า 1000 ไม่สามารถขอเพิ่มได้');
+      return;
+    }
+    const amountStr = prompt('ระบุจำนวนชิปที่ต้องการขอเพิ่ม', '10000');
+    if (!amountStr) return;
+    const requestedAmount = parseInt(amountStr);
+    if (isNaN(requestedAmount) || requestedAmount <= 0) {
+      alert('จำนวนชิปไม่ถูกต้อง');
+      return;
+    }
+
     try {
       const res = await fetch('/api/chips/request', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${user.token}` }
+        headers: { 
+          'Authorization': `Bearer ${user.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ requestedAmount })
       });
       const data = await res.json();
       if (res.ok) alert(data.message || 'ส่งคำขอสำเร็จ กรุณารอ Admin อนุมัติ');

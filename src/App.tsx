@@ -165,7 +165,7 @@ function GameApp() {
   // Handle kick out if busted
   useEffect(() => {
     if (roomPublic && authUser) {
-      const hero = roomPublic.players.find((p: any) => p.id === authUser.id);
+      const hero = players[authUser.id];
       // If hero was in the room but now isn't (busted)
       if (!hero && currentRoomId) {
         alert('คุณหมดตัวแล้ว และถูกเตะออกจากห้องอัตโนมัติ!');
@@ -173,7 +173,7 @@ function GameApp() {
         setRoomPublic(null);
       }
     }
-  }, [roomPublic, authUser, currentRoomId]);
+  }, [roomPublic, authUser, currentRoomId, players]);
 
   const handleLeaveRoom = async () => {
     if (!currentRoomId) return;

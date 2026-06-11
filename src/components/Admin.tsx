@@ -163,17 +163,18 @@ export default function Admin({ user, onLogout }: AdminProps) {
                     <div className="flex gap-2 items-center mt-4 sm:mt-0">
                       <input 
                         type="number" 
-                        value={approveAmount[req.id] || 10000} 
+                        value={approveAmount[req.id] || req.amount || 10000} 
                         onChange={(e) => setApproveAmount({ ...approveAmount, [req.id]: Number(e.target.value) })}
                         className="w-24 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 text-sm text-center"
                       />
                       <button 
                         onClick={async () => {
-                           if (!window.confirm(`อนุมัติ ${approveAmount[req.id] || 10000} ชิปให้ ${req.displayName}?`)) return;
+                           const finalAmount = approveAmount[req.id] || req.amount || 10000;
+                           if (!window.confirm(`อนุมัติ ${finalAmount} ชิปให้ ${req.displayName}?`)) return;
                            await fetch(`/api/chips/requests/${req.id}/approve`, {
                              method: 'POST',
                              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.token}` },
-                             body: JSON.stringify({ amount: approveAmount[req.id] || 10000 })
+                             body: JSON.stringify({ amount: finalAmount })
                            });
                            fetchRequests();
                         }}

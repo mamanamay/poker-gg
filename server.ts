@@ -1508,11 +1508,15 @@ app.post('/api/chips/request', authenticate, async (req: express.Request, res: e
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
   if (!db) return res.status(500).json({ error: 'Database not initialized' });
 
+  const { requestedAmount } = req.body;
+  const amount = Number(requestedAmount) || 10000;
+
   try {
     const requestDoc = {
       userId: user.id,
       username: user.username,
       displayName: user.displayName,
+      amount: amount,
       status: 'pending',
       createdAt: new Date().toISOString()
     };
