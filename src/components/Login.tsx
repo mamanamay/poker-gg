@@ -53,7 +53,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-amber-500/10 text-amber-500 mb-4">
             <Lock size={32} />
           </div>
-          <h1 className="text-3xl font-bold text-amber-500 mb-2">โป๊กเกอร์ รอยัล</h1>
+          <h1 className="text-3xl font-bold text-amber-500 mb-2">PokerGG</h1>
           <p className="text-slate-400">เข้าสู่ระบบเพื่อเริ่มเล่นเกม</p>
         </div>
 

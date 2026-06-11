@@ -312,7 +312,10 @@ function GameApp() {
           <h1 className="text-xl font-bold text-amber-500 hidden sm:block">PokerGG</h1>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-sm text-slate-400">รหัสห้อง: <strong className="text-amber-500 font-mono text-lg tracking-wider">{roomPublic?.inviteCode || currentRoomId}</strong></span>
+          <div className="text-right hidden sm:block">
+            <div className="text-sm font-bold text-slate-200">{roomPublic?.roomName || `ห้อง ${currentRoomId}`}</div>
+            <div className="text-[10px] text-slate-400 font-mono tracking-wider">ID: {currentRoomId} {roomPublic?.hasPassword && '🔒'}</div>
+          </div>
           <button 
             onClick={handleLeaveRoom}
             className="flex items-center gap-2 px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 rounded-lg transition-colors text-xs font-medium border border-rose-500/30"
@@ -494,19 +497,34 @@ function GameApp() {
                   {isLoading ? <Loader2 className="animate-spin" size={18} /> : <Play size={18} />}
                   เริ่มเกม / แจกไพ่
                 </button>
-                <button
-                  onClick={async () => {
-                     setIsLoading(true);
-                     try {
-                       await fetch(`/api/rooms/${currentRoomId}/add-bot`, { method: 'POST', headers: { Authorization: `Bearer ${authUser?.token}` } });
-                       await fetchRoomState(currentRoomId!);
-                     } finally { setIsLoading(false); }
-                  }}
-                  disabled={isLoading || playerList.length >= 5}
-                  className="w-full mt-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 rounded-xl border border-slate-700 transition-all flex items-center justify-center gap-2 text-sm"
-                >
-                  + เพิ่มบอท 🤖
-                </button>
+                <div className="flex gap-2 w-full mt-2">
+                  <button
+                    onClick={async () => {
+                       setIsLoading(true);
+                       try {
+                         await fetch(`/api/rooms/${currentRoomId}/add-bot`, { method: 'POST', headers: { Authorization: `Bearer ${authUser?.token}` } });
+                         await fetchRoomState(currentRoomId!);
+                       } finally { setIsLoading(false); }
+                    }}
+                    disabled={isLoading || playerList.length >= 5}
+                    className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 rounded-xl border border-slate-700 transition-all flex items-center justify-center gap-1 text-xs"
+                  >
+                    + เพิ่มบอท 🤖
+                  </button>
+                  <button
+                    onClick={async () => {
+                       setIsLoading(true);
+                       try {
+                         await fetch(`/api/rooms/${currentRoomId}/remove-bot`, { method: 'POST', headers: { Authorization: `Bearer ${authUser?.token}` } });
+                         await fetchRoomState(currentRoomId!);
+                       } finally { setIsLoading(false); }
+                    }}
+                    disabled={isLoading || !playerList.some(p => p.isBot)}
+                    className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 rounded-xl border border-slate-700 transition-all flex items-center justify-center gap-1 text-xs"
+                  >
+                    - ลดบอท
+                  </button>
+                </div>
                 {playerList.length < 2 && (
                   <div className="text-[10px] text-rose-400 mt-2">ต้องการผู้เล่นอย่างน้อย 2 คนเพื่อเริ่มเกม</div>
                 )}
@@ -584,16 +602,20 @@ function GameApp() {
             )}
           </div>
 
-          {/* Action Logs */}
+          {/* Action Logs / History */}
           <div className="flex-1 overflow-y-auto p-4 bg-slate-950/50 flex flex-col gap-2">
-            <h3 className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">ประวัติห้อง (Logs)</h3>
-            {actionLogs.map((log, i) => (
-              <div key={i} className={`text-[11px] p-2 rounded-lg border ${
-                i === 0 ? 'bg-slate-800 border-slate-700 text-slate-200 shadow-sm' : 'bg-transparent border-transparent text-slate-500'
-              }`}>
-                {log}
-              </div>
-            ))}
+            <h3 className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2">ประวัติการแข่ง (Hand History)</h3>
+            {(roomPublic?.handHistory && roomPublic.handHistory.length > 0) ? (
+              roomPublic.handHistory.map((h: any, i: number) => (
+                <div key={i} className="text-xs p-3 rounded-xl border bg-slate-800/80 border-slate-700 shadow-sm flex flex-col gap-1">
+                  <span className="text-amber-400 font-bold tracking-wide">🏆 เงินกองกลาง: ${h.pot}</span>
+                  <span className="text-slate-300">{h.winDesc}</span>
+                  <span className="text-[9px] text-slate-500 text-right">{new Date(h.time).toLocaleTimeString()}</span>
+                </div>
+              ))
+            ) : (
+              <div className="text-xs text-slate-500 italic">ยังไม่มีประวัติการแข่งในห้องนี้</div>
+            )}
           </div>
 
         </div>

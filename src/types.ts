@@ -31,6 +31,8 @@ export interface Player {
 
 export interface RoomPublicState {
   roomId: string;
+  roomName?: string;
+  hasPassword?: boolean;
   status: RoomStatus;
   pot: number;
   currentBet: number; // current required bet to stay in (e.g. BB size or highest raise)
@@ -41,8 +43,10 @@ export interface RoomPublicState {
   updatedAt: number;
   smallBlind: number;
   bigBlind: number;
-  winnerIds: string[] | null;
-  winDesc: string | null;
+  winnerIds?: string[] | null;
+  winDesc?: string | null;
+  inviteCode?: string;
+  handHistory?: any[];
 }
 
 export interface RoomPrivateState {

@@ -91,7 +91,7 @@ export default function Admin({ user, onLogout }: AdminProps) {
             <h1 className="text-xl font-bold">ระบบจัดการหลังบ้าน (Admin)</h1>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-slate-400">ยินดีต้อนรับ, {user.displayName}</span>
+            <span className="text-slate-400 font-medium">คุณคือ Admin: <span className="text-amber-500">{user.displayName}</span></span>
             <button 
               onClick={onLogout}
               className="flex items-center gap-2 px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 rounded-xl transition-colors text-sm font-medium"

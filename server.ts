@@ -133,6 +133,8 @@ function seedRooms() {
       deck: [],
       allHoleCards: {}
     };
+    (rooms[id] as any).roomName = name;
+    (rooms[id] as any).handHistory = [];
   };
 
   seedRoom('poker-lounge-1', "The Royal Felt Lounge");
@@ -227,7 +229,7 @@ app.post('/api/register', async (req, res) => {
   res.json({
     user: {
       id,
-      username,
+      username: user.username,
       role: 'player',
       displayName: newUser.displayName,
       token,
@@ -282,6 +284,33 @@ async function syncRoomChips(room: RoomInternal) {
       }
     }
   }
+
+  // Save Hand History
+  try {
+    if (room.winDesc) {
+      const historyDoc = {
+        roomId: room.roomId,
+        roomName: (room as any).roomName || room.roomId,
+        pot: room.pot,
+        winDesc: room.winDesc,
+        winners: room.winnerIds || [],
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      };
+      await db.collection('history').add(historyDoc);
+      
+      // Also push to transient room history for UI
+      if (!(room as any).handHistory) (room as any).handHistory = [];
+      (room as any).handHistory.unshift({
+        winDesc: room.winDesc,
+        pot: room.pot,
+        time: Date.now()
+      });
+      // Keep only last 10 logs
+      if ((room as any).handHistory.length > 10) (room as any).handHistory.pop();
+    }
+  } catch (e) {
+    console.error(`[Poker Server] Failed to save hand history`, e);
+  }
 }
 
 // --- POKER ROOM API ---
@@ -290,6 +319,8 @@ async function syncRoomChips(room: RoomInternal) {
 app.get('/api/rooms', (req, res) => {
   const roomList = Object.values(rooms).map(room => ({
     roomId: room.roomId,
+    roomName: (room as any).roomName || room.roomId,
+    hasPassword: !!(room as any).password,
     status: room.status,
     pot: room.pot,
     playerCount: Object.keys(room.players).length,
@@ -326,8 +357,19 @@ app.post('/api/rooms', (req, res) => {
   const user = (req as any).user as AuthUser;
   if (!user) return res.status(401).json({ error: 'กรุณาเข้าสู่ระบบก่อนสร้างห้อง' });
 
-  const { roomName, mode } = req.body;
+  const { roomName, mode, password } = req.body;
   
+  // Find next available room name (room1, room2) if roomName is empty
+  let newRoomId = '';
+  let i = 1;
+  while(true) {
+    if (!rooms[`room${i}`]) {
+      newRoomId = `room${i}`;
+      break;
+    }
+    i++;
+  }
+
   // Generate high-entropy short 6-character uppercase join code
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Omitted confusing O, I, 0, 1 characters
   let inviteCode = '';
@@ -335,10 +377,8 @@ app.post('/api/rooms', (req, res) => {
     inviteCode += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   
-  const roomId = `room-${inviteCode.toLowerCase()}`;
-  
-  rooms[roomId] = {
-    roomId,
+  const newRoom: RoomInternal = {
+    roomId: newRoomId,
     status: 'LOBBY',
     pot: 0,
     currentBet: 0,
@@ -369,11 +409,19 @@ app.post('/api/rooms', (req, res) => {
     allHoleCards: {}
   };
 
+  (newRoom as any).roomName = roomName || newRoomId;
+  if (password) {
+    (newRoom as any).password = password;
+  }
+  (newRoom as any).handHistory = [];
+
+  rooms[newRoomId] = newRoom;
+
   if (mode === 'bots') {
     const botNames = ['Bot Alpha', 'Bot Omega', 'Bot Gamma', 'Bot Delta'];
     for (let i = 1; i <= 4; i++) {
       const botId = `bot-${i}`;
-      rooms[roomId].players[botId] = {
+      rooms[newRoomId].players[botId] = {
         id: botId,
         name: botNames[i-1],
         chips: 1000,
@@ -388,24 +436,34 @@ app.post('/api/rooms', (req, res) => {
     }
   }
 
-  res.status(201).json({ success: true, roomId, inviteCode, message: `Room ${roomName || inviteCode} created successfully.` });
+  res.status(201).json({ success: true, roomId: newRoomId, inviteCode, message: `Room ${roomName || inviteCode} created successfully.` });
 });
 
-// Join an existing room via invite code
+// Join an existing room via invite code or room ID
 app.post('/api/rooms/join', (req, res) => {
   const user = (req as any).user as AuthUser;
   if (!user) return res.status(401).json({ error: 'กรุณาเข้าสู่ระบบก่อนเข้าร่วมห้อง' });
 
-  const { inviteCode } = req.body;
-  if (!inviteCode) {
+  const { inviteCode, roomId, password } = req.body;
+  if (!inviteCode && !roomId) {
     return res.status(400).json({ error: 'ระบุรหัสห้อง' });
   }
 
-  const codeUpper = inviteCode.trim().toUpperCase();
-  const room = Object.values(rooms).find(r => r.inviteCode === codeUpper);
+  let room;
+  if (inviteCode) {
+    const codeUpper = inviteCode.trim().toUpperCase();
+    room = Object.values(rooms).find(r => r.inviteCode === codeUpper);
+  } else if (roomId) {
+    room = rooms[roomId];
+  }
   
   if (!room) {
-    return res.status(404).json({ error: `ไม่พบรหัสห้อง ${codeUpper} กรุณาตรวจสอบให้ถูกต้อง` });
+    return res.status(404).json({ error: `ไม่พบห้องที่ระบุ กรุณาตรวจสอบให้ถูกต้อง` });
+  }
+
+  // Check password
+  if ((room as any).password && (room as any).password !== password) {
+    return res.status(401).json({ error: 'รหัสผ่านห้องไม่ถูกต้อง' });
   }
 
   const id = user.id;
@@ -474,6 +532,23 @@ app.post('/api/rooms/:roomId/add-bot', (req, res) => {
   };
 
   res.json({ success: true, message: 'Bot added' });
+});
+
+// Helper to remove bot
+app.post('/api/rooms/:roomId/remove-bot', (req, res) => {
+  const user = (req as any).user as AuthUser;
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  const { roomId } = req.params;
+  const room = rooms[roomId];
+  if (!room) return res.status(404).json({ error: 'Room not found' });
+  if (room.status !== 'LOBBY') return res.status(400).json({ error: 'Game already started' });
+
+  // Find a bot to remove
+  const botIds = Object.keys(room.players).filter(id => room.players[id].isBot);
+  if (botIds.length === 0) return res.status(400).json({ error: 'No bots to remove' });
+  
+  delete room.players[botIds[0]];
+  res.json({ success: true, message: 'Bot removed' });
 });
 
 // Handle player leaves/disconnects gracefully during hands and lobbies
@@ -626,6 +701,7 @@ app.get('/api/rooms/:roomId', (req, res) => {
   // Clone public state to avoid leaks
   const publicState: RoomPublicState = {
     roomId: room.roomId,
+    roomName: (room as any).roomName || room.roomId,
     status: room.status,
     pot: room.pot,
     currentBet: room.currentBet,
@@ -637,7 +713,9 @@ app.get('/api/rooms/:roomId', (req, res) => {
     smallBlind: room.smallBlind,
     bigBlind: room.bigBlind,
     winnerIds: room.winnerIds,
-    winDesc: room.winDesc
+    winDesc: room.winDesc,
+    inviteCode: room.inviteCode,
+    handHistory: (room as any).handHistory || []
   };
 
   // Clone player states securely (hides secret arrays)
