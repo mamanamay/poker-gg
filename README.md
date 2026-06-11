@@ -1,5 +1,5 @@
 
-# 🃏 PokerGG (Texas Hold'em Web Game)
+# 🃏 PokerGG (Web Game)
 
 ![PokerGG Preview](./public/assets/preview.png)
 ![PokerGG Lobby](./public/assets/preview1.png)
