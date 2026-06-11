@@ -2,6 +2,7 @@
 # 🃏 PokerGG (Texas Hold'em Web Game)
 
 ![PokerGG Preview](./public/assets/preview.png)
+![PokerGG Lobby](./public/assets/preview1.png)
 
 **PokerGG** is a fully functional, modern web-based Texas Hold'em poker game. Built with cutting-edge web technologies, it features real-time multiplayer capabilities, intelligent offline bots, and a sleek, glassmorphic UI.
 

@@ -593,7 +593,27 @@ app.get('/api/user/me', authenticate, async (req: express.Request, res: express.
     }
   }
   if (!userObj) return res.status(404).json({ error: 'User not found' });
-  res.json({ id: userObj.id, username: userObj.username, displayName: userObj.displayName, chips: userObj.chips, role: userObj.role });
+  res.json({ 
+    id: userObj.id, 
+    username: userObj.username, 
+    displayName: userObj.displayName, 
+    chips: userObj.chips, 
+    role: userObj.role,
+    rejectedChipRequest: userObj.rejectedChipRequest
+  });
+});
+
+app.post('/api/user/clear-notification', authenticate, async (req: express.Request, res: express.Response) => {
+  const reqUser = (req as any).user;
+  if (users[reqUser.id]) {
+    users[reqUser.id].rejectedChipRequest = false;
+  }
+  if (db) {
+    try {
+      await db.collection('users').doc(reqUser.id).update({ rejectedChipRequest: false });
+    } catch(err) {}
+  }
+  res.json({ success: true });
 });
 
 // Admin API: Rig deck (Force Winner)
@@ -1534,7 +1554,11 @@ app.get('/api/chips/requests', authenticate, async (req: express.Request, res: e
 
   try {
     const snap = await db.collection('chip_requests').where('status', '==', 'pending').get();
-    const requests = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const requests = snap.docs.map(doc => {
+      const data = doc.data();
+      const currentChips = users[data.userId]?.chips || 0;
+      return { id: doc.id, ...data, currentChips };
+    });
     res.json(requests);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch requests' });
@@ -1585,7 +1609,21 @@ app.post('/api/chips/requests/:id/reject', authenticate, async (req: express.Req
   const { id } = req.params;
   try {
     const docRef = db.collection('chip_requests').doc(id);
+    const doc = await docRef.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Request not found' });
+    
     await docRef.update({ status: 'rejected', rejectedAt: new Date().toISOString() });
+    
+    const targetUserId = doc.data()?.userId;
+    if (targetUserId) {
+      if (users[targetUserId]) {
+        users[targetUserId].rejectedChipRequest = true;
+      }
+      try {
+        await db.collection('users').doc(targetUserId).update({ rejectedChipRequest: true });
+      } catch(err) {}
+    }
+    
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed' });

@@ -139,15 +139,25 @@ function GameApp() {
   // Bot Action Poller
   useEffect(() => {
     if (!currentRoomId && authUser?.token) {
-      // Fetch latest chips when returning to lobby
-      fetch('/api/user/me', { headers: { Authorization: `Bearer ${authUser.token}` } })
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.chips !== undefined) {
+      const fetchUser = async () => {
+        try {
+          const res = await fetch('/api/user/me', { headers: { Authorization: `Bearer ${authUser.token}` } });
+          const data = await res.json();
+          if (data && !data.error) {
             setAuthUser(prev => prev ? { ...prev, chips: data.chips } : prev);
+            if (data.rejectedChipRequest) {
+              alert('คำขอเครดิตของคุณถูกปฏิเสธจาก Admin');
+              await fetch('/api/user/clear-notification', { method: 'POST', headers: { Authorization: `Bearer ${authUser.token}` } });
+            }
           }
-        })
-        .catch(console.error);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+      
+      fetchUser();
+      const userInterval = setInterval(fetchUser, 3000);
+      return () => clearInterval(userInterval);
     }
   }, [currentRoomId, authUser?.token]);
 

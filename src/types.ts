@@ -66,10 +66,11 @@ export type UserRole = 'admin' | 'player';
 export interface AuthUser {
   id: string;
   username: string;
-  role: UserRole;
   displayName: string;
+  role: UserRole;
   token?: string;
   chips?: number;
+  rejectedChipRequest?: boolean;
 }
 
 // Complete layout reflecting the Firebase Realtime DB schema representation

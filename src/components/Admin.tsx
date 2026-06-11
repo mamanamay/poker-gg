@@ -158,7 +158,7 @@ export default function Admin({ user, onLogout }: AdminProps) {
                   <div key={req.id} className="flex flex-col sm:flex-row items-center justify-between bg-slate-950 p-4 rounded-xl border border-slate-800">
                     <div>
                       <div className="font-bold text-slate-200">{req.displayName}</div>
-                      <div className="text-xs text-slate-500">ID: {req.userId} | เมื่อ: {new Date(req.createdAt).toLocaleString('th-TH')}</div>
+                      <div className="text-xs text-slate-500">ID: {req.userId} | มีชิปปัจจุบัน: <span className="text-emerald-400 font-bold">${req.currentChips ?? 0}</span> | เมื่อ: {new Date(req.createdAt).toLocaleString('th-TH')}</div>
                     </div>
                     <div className="flex gap-2 items-center mt-4 sm:mt-0">
                       <input 

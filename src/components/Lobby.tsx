@@ -98,6 +98,10 @@ export default function Lobby({ user, onJoinRoom, onLogout }: LobbyProps) {
       alert('จำนวนชิปไม่ถูกต้อง');
       return;
     }
+    if (requestedAmount > 100000) {
+      alert('ไม่สามารถขอเครดิตเกิน 100,000 ชิปได้ในแต่ละครั้ง');
+      return;
+    }
 
     try {
       const res = await fetch('/api/chips/request', {
