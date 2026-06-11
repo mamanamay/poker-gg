@@ -139,6 +139,20 @@ function GameApp() {
 
   // Bot Action Poller
   useEffect(() => {
+    if (!currentRoomId && authUser?.token) {
+      // Fetch latest chips when returning to lobby
+      fetch('/api/user/me', { headers: { Authorization: `Bearer ${authUser.token}` } })
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.chips !== undefined) {
+            setAuthUser(prev => prev ? { ...prev, chips: data.chips } : prev);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [currentRoomId, authUser?.token]);
+
+  useEffect(() => {
     if (!roomPublic || !currentRoomId) return;
     const activePlayer = players[roomPublic.activePlayerId || ''];
     if (activePlayer && activePlayer.isBot && roomPublic.status !== 'SHOWDOWN' && roomPublic.status !== 'LOBBY') {
@@ -146,8 +160,20 @@ function GameApp() {
         triggerBotAction();
       }, 500);
       return () => clearTimeout(timer);
-    }
   }, [roomPublic?.activePlayerId, roomPublic?.status]);
+
+  // Handle kick out if busted
+  useEffect(() => {
+    if (roomPublic && authUser) {
+      const hero = roomPublic.players.find((p: any) => p.id === authUser.id);
+      // If hero was in the room but now isn't (busted)
+      if (!hero && currentRoomId) {
+        alert('คุณหมดตัวแล้ว และถูกเตะออกจากห้องอัตโนมัติ!');
+        setCurrentRoomId(null);
+        setRoomPublic(null);
+      }
+    }
+  }, [roomPublic, authUser, currentRoomId]);
 
   const handleLeaveRoom = async () => {
     if (!currentRoomId) return;
@@ -342,10 +368,10 @@ function GameApp() {
               const isDealer = roomPublic?.dealerIndex === p.seatIndex;
 
               return (
-                <div key={p.id} className={`relative flex flex-col items-center justify-center p-2 sm:p-3 rounded-xl border-2 transition-all ${isActive ? 'bg-slate-800/90 border-amber-500 ring-2 ring-amber-500/30 shadow-xl scale-105' : 'bg-slate-950/70 border-slate-800'} min-w-[100px]`}>
+                <div key={p.id} className={`relative flex flex-col items-center justify-center p-2 sm:p-3 rounded-xl border-2 transition-all ${isActive ? 'bg-slate-800/90 border-amber-500 ring-2 ring-amber-500/30 shadow-xl scale-105' : 'bg-slate-950/70 border-slate-800'} min-w-[80px]`}>
                   {/* Status Badge */}
                   <span className="absolute -top-3 bg-slate-800 text-[10px] py-0.5 px-2.5 rounded-full border border-slate-700 flex items-center gap-1.5 font-bold whitespace-nowrap">
-                    {p.isBot ? <Bot size={12} className="text-sky-400" /> : <User size={12} className="text-emerald-400" />}
+                    {p.isBot ? '🤖' : '👤'}
                     {p.name}
                   </span>
 
@@ -479,10 +505,11 @@ function GameApp() {
               </div>
           )}
           </div>
+          </div>
         </div>
 
         {/* Right Panel: Controls & Logs */}
-        <div className="w-full lg:w-80 bg-slate-900 border-l border-slate-800 flex flex-col shadow-2xl z-20">
+        <div className="w-full lg:w-80 lg:max-w-xs bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col shadow-2xl z-20 h-auto lg:h-full">
           
           {/* Action Panel */}
           <div className="p-4 border-b border-slate-800 bg-slate-950/30">

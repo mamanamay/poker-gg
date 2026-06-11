@@ -578,6 +578,24 @@ app.delete('/api/rooms/:roomId/admin/kick/:playerId', (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/logout', (req, res) => {
+  res.json({ success: true });
+});
+
+app.get('/api/user/me', authenticate, async (req: express.Request, res: express.Response) => {
+  const reqUser = (req as any).user;
+  let userObj = users[reqUser.id];
+  if (db) {
+    const doc = await db.collection('users').doc(reqUser.id).get();
+    if (doc.exists) {
+      userObj = { id: doc.id, ...doc.data() } as any;
+      users[reqUser.id] = userObj; // keep memory in sync
+    }
+  }
+  if (!userObj) return res.status(404).json({ error: 'User not found' });
+  res.json({ id: userObj.id, username: userObj.username, displayName: userObj.displayName, chips: userObj.chips, role: userObj.role });
+});
+
 // Admin API: Rig deck (Force Winner)
 app.post('/api/rooms/:roomId/admin/rig', (req, res) => {
   const user = (req as any).user as AuthUser;

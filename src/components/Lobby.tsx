@@ -18,6 +18,8 @@ export default function Lobby({ user, onJoinRoom, onLogout }: LobbyProps) {
   const [roomPassword, setRoomPassword] = useState('');
   const [joinPassword, setJoinPassword] = useState('');
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [directJoinId, setDirectJoinId] = useState('');
+  const [directJoinPassword, setDirectJoinPassword] = useState('');
 
   const fetchRooms = async () => {
     try {
@@ -105,14 +107,12 @@ export default function Lobby({ user, onJoinRoom, onLogout }: LobbyProps) {
         <span className="bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 text-emerald-400 font-bold font-mono text-xs">
           ${user.chips || 0}
         </span>
-        {(user.chips || 0) < 1000 && (
-          <button 
-            onClick={handleRequestChips}
-            className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white rounded-lg transition-colors text-xs font-bold border border-emerald-500/30"
-          >
-            ขอเพิ่มเครดิต
-          </button>
-        )}
+        <button 
+          onClick={handleRequestChips}
+          className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white rounded-lg transition-colors text-xs font-bold border border-emerald-500/30"
+        >
+          ขอเพิ่มเครดิต
+        </button>
         <button 
           onClick={onLogout}
           className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors text-xs font-medium border border-slate-700"
@@ -258,6 +258,35 @@ export default function Lobby({ user, onJoinRoom, onLogout }: LobbyProps) {
                 </div>
               ))
             )}
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-slate-800">
+            <h3 className="text-sm font-bold text-slate-300 mb-2">เข้าร่วมด้วยรหัสเชิญ</h3>
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                placeholder="รหัสห้อง (เช่น abcd-1234)" 
+                value={directJoinId}
+                onChange={e => setDirectJoinId(e.target.value)}
+                className="flex-1 px-3 py-2 text-sm bg-slate-800 border border-slate-700 rounded-lg text-white"
+              />
+              <input 
+                type="password" 
+                placeholder="รหัสผ่าน (ถ้ามี)" 
+                value={directJoinPassword}
+                onChange={e => setDirectJoinPassword(e.target.value)}
+                className="w-24 px-3 py-2 text-sm bg-slate-800 border border-slate-700 rounded-lg text-white"
+              />
+              <button 
+                onClick={() => {
+                  if (directJoinId) handleJoinRoom(directJoinId, directJoinPassword);
+                }}
+                disabled={loading || !directJoinId}
+                className="px-4 py-2 bg-amber-500 text-slate-900 font-bold rounded-lg hover:bg-amber-400 disabled:opacity-50"
+              >
+                เข้า
+              </button>
+            </div>
           </div>
         </div>
       </motion.div>
