@@ -549,12 +549,10 @@ function removePlayerFromRoom(room: RoomInternal, playerId: string) {
   delete room.players[playerId];
 
   // Auto clean empty customized rooms to prevent server memory bloat
-  if (Object.keys(room.players).length === 0 && !['poker-lounge-1', 'bot-training'].includes(roomId)) {
-    delete rooms[roomId];
+  if (Object.keys(room.players).length === 0 && !['poker-lounge-1', 'bot-training'].includes(room.roomId)) {
+    delete rooms[room.roomId];
   }
-
-  res.json({ success: true, message: `Player left or disconnected safely.` });
-});
+}
 
 // Guess the Card Color (Red/Black) mini-game to win 500 chips back when busted!
 app.post('/api/mini-game/guess', (req, res) => {
